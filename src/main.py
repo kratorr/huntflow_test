@@ -45,13 +45,17 @@ tranlastion_statuses = {
 
 
 def get_account_id():
-    r = requests.get(API_URL + ENDPOINTS['accounts'], headers=HEADERS).json()
+    r = requests.get(API_URL + ENDPOINTS['accounts'], headers=HEADERS)
+    if r.status_code == requests.codes.ok:
+        r = r.json()
     return r['items'][0]['id']
 
 def get_vacancies(account_id):
     url = API_URL + ENDPOINTS['vacancies'].format(account_id)
     try:
-        r = requests.get(url, headers=HEADERS).json()
+        r = requests.get(url, headers=HEADERS)
+        if r.status_code == requests.codes.ok:
+            r = r.json()
     except requests.exceptions.ConnectionError as e:
         return None
     return r['items']
@@ -60,7 +64,9 @@ def get_vacancies(account_id):
 def get_canditate_statuses(account_id):
     url = API_URL + ENDPOINTS['statuses'].format(account_id)
     try:
-        r = requests.get(url, headers=HEADERS).json()
+        r = requests.get(url, headers=HEADERS)
+        if r.status_code == requests.codes.ok:
+            r = r.json()
     except requests.exceptions.ConnectionError as e:
         return None
     return r['items']
@@ -114,8 +120,9 @@ def upload_cv(candidate, account_id):
     files = {'file': (os.path.basename(candidate['cv_path']), open(candidate['cv_path'], 'rb'), mime_type[0])}
     url = API_URL + ENDPOINTS['upload_cv'].format(account_id)
     try:
-        r = requests.post(url, files=files, headers=headres_local).json()
-        print(r)
+        r = requests.post(url, files=files, headers=headres_local)
+        if r.status_code == requests.codes.ok:
+            r = r.json()
     except requests.exceptions.ConnectionError as e:
         print(e)
     return r
@@ -146,17 +153,22 @@ def upload_candidates(candidate, account_id, vacancies, statuses):
                 "auth_type": "NATIVE",
                 "files": [
                     {
-                        "id": 45
+                        "id": data_from_cv['id']
                     }
                 ],
                 "account_source": None
             }
         ]
     }
-    print(prepared_candidate)
+    #print(prepared_candidate)
     url = API_URL + ENDPOINTS['add_candidate'].format(account_id)
-    r = requests.post(url, headers=HEADERS, data=prepared_candidate)
-    print(r.content)
+    try:
+        r = requests.post(url, headers=HEADERS, json=prepared_candidate)
+        if r.status_code == requests.codes.ok:
+            r = r.json()
+            print(r)
+    except ConnectionError as e:
+        print(e)
 
 
 
