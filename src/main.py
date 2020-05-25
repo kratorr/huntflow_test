@@ -28,9 +28,10 @@ HEADERS = {
 ENDPOINTS = {
     'vacancies': 'account/{}/vacancies',
     'statuses': 'account/{}/vacancy/statuses',
-    'add_candidate': 'account/{}/applicants',
+    'add_applicant': 'account/{}/applicants',
     'upload_cv': 'account/{}/upload',
     'accounts': 'accounts',
+    'attach_to_vacancy': '/account/{}/applicants/{}/vacancy'
     }
 TOKEN = ''
 
@@ -128,10 +129,45 @@ def upload_cv(candidate, account_id):
     return r
 
 
+def upload_applicant(prepared_candidate, account_id):
+    url = API_URL + ENDPOINTS['add_applicant'].format(account_id)
+    try:
+        r = requests.post(url, headers=HEADERS, json=prepared_candidate)
+        if r.status_code == requests.codes.ok:
+            r = r.json()
+    except ConnectionError as e:
+        sys.exit(1)
+    return r['id']
+
+
+def attach_to_vacancy(account_id, applicant_id, vacancy_id, status):
+    url = API_URL + ENDPOINTS['attach_to_vacancy'].format(account_id, applicant_id)
+    payload = {
+            "vacancy": vacancy_id,
+            "status": 1230,
+            "comment": "Привет",
+            "files": [
+                {
+                    "id": 1382810
+                }
+            ],
+            "rejection_reason": null
+        }
+
+    
+    try:
+        r = requests.post(url, headers=HEADERS, json=prepared_candidate)
+        if r.status_code == requests.codes.ok:
+            r = r.json()
+            print(r)
+    except ConnectionError as e:
+        sys.exit(1)
+
+
 def upload_candidates(candidate, account_id, vacancies, statuses):
     data_from_cv = upload_cv(candidate, account_id)
-
-   # print(data_from_cv)
+    print(statuses)
+    print(candidate['status'], 'ststus')
     prepared_candidate = {
         "last_name": data_from_cv['fields']['name']['last'],
         "first_name": data_from_cv['fields']['name']['first'],
@@ -160,17 +196,8 @@ def upload_candidates(candidate, account_id, vacancies, statuses):
             }
         ]
     }
-    #print(prepared_candidate)
-    url = API_URL + ENDPOINTS['add_candidate'].format(account_id)
-    try:
-        r = requests.post(url, headers=HEADERS, json=prepared_candidate)
-        if r.status_code == requests.codes.ok:
-            r = r.json()
-            print(r)
-    except ConnectionError as e:
-        print(e)
-
-
+    applicant_id = upload_applicant(prepared_candidate, account_id)
+    attach_to_vacancy(account_id, applicant_id, candidate['vacancy_id'])
 
 
 
