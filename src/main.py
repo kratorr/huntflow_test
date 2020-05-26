@@ -10,7 +10,6 @@ import requests
 from requests.exceptions import ConnectionError
 from openpyxl import load_workbook
 
-
 logger = logging.getLogger('huntflow_uploader')
 logger.setLevel(logging.DEBUG)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -18,15 +17,12 @@ ch = logging.StreamHandler()
 ch.setFormatter(formatter)
 logger.addHandler(ch)
 
-
 parser = argparse.ArgumentParser(description='Huntflow upload candidates script')
 parser.add_argument('-t', '--token', help='API Token', required=True)
 parser.add_argument('-f', '--db_file', help='path to db_file', required=True)
 args = parser.parse_args()
 
-
 API_URL = 'https://dev-100-api.huntflow.ru/'
-
 
 HEADERS = {
     'User-Agent': 'App/1.0 (incaseoffire@example.com)',
@@ -40,8 +36,7 @@ ENDPOINTS = {
     'upload_cv': 'account/{}/upload',
     'accounts': 'accounts',
     'attach_to_vacancy': 'account/{}/applicants/{}/vacancy'
-    }
-
+}
 
 tranlastion_statuses = {
     'Интервью с HR': 'HR Interview',
@@ -153,16 +148,16 @@ def upload_applicant(prepared_candidate, account_id):
 def attach_to_vacancy(account_id, applicant_id, attach_params):
     url = API_URL + ENDPOINTS['attach_to_vacancy'].format(account_id, applicant_id)
     payload = {
-            "vacancy": attach_params['vacancy_id'],
-            "status": attach_params['status_id'],
-            "comment": attach_params['comment'],
-            "files": [
-                {
-                    "id": attach_params['file_id']
-                }
-            ],
-            "rejection_reason":  attach_params['comment'] if attach_params['status_id'] == 50 else None # 50 Decline status
-        }
+        "vacancy": attach_params['vacancy_id'],
+        "status": attach_params['status_id'],
+        "comment": attach_params['comment'],
+        "files": [
+            {
+                "id": attach_params['file_id']
+            }
+        ],
+        "rejection_reason": attach_params['comment'] if attach_params['status_id'] == 50 else None  # 50 Decline status
+    }
 
     try:
         r = requests.post(url, headers=HEADERS, json=payload)
@@ -184,9 +179,12 @@ def upload_candidates(candidate, account_id, vacancies, statuses):
         "position": candidate['position'],
         "company": data_from_cv['fields']['experience'][0]['company'],
         "money": str(candidate['salary']),
-        "birthday_day": data_from_cv['fields']['birthdate']['day'] if data_from_cv['fields']['birthdate'] is not None else None,
-        "birthday_month": data_from_cv['fields']['birthdate']['month'] if data_from_cv['fields']['birthdate'] is not None else None,
-        "birthday_year": data_from_cv['fields']['birthdate']['year'] if data_from_cv['fields']['birthdate'] is not None else None,
+        "birthday_day": data_from_cv['fields']['birthdate']['day'] \
+            if data_from_cv['fields']['birthdate'] is not None else None,
+        "birthday_month": data_from_cv['fields']['birthdate']['month'] \
+            if data_from_cv['fields']['birthdate'] is not None else None,
+        "birthday_year": data_from_cv['fields']['birthdate']['year'] \
+            if data_from_cv['fields']['birthdate'] is not None else None,
         "photo": data_from_cv['photo']['id'] if 'photo' in data_from_cv else None,
         "externals": [
             {
