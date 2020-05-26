@@ -2,9 +2,9 @@ import os
 import sys
 import unicodedata
 import logging
-from typing import List
-from mimetypes import MimeTypes
+import argparse
 
+from mimetypes import MimeTypes
 
 import requests
 from requests.exceptions import ConnectionError
@@ -19,22 +19,28 @@ ch.setFormatter(formatter)
 logger.addHandler(ch)
 
 
+parser = argparse.ArgumentParser(description='Huntflow upload candidates script')
+parser.add_argument('-t', '--token', help='API Token', required=True)
+parser.add_argument('-f', '--db_file', help='path to db_file', required=True)
+args = parser.parse_args()
+
+
 API_URL = 'https://dev-100-api.huntflow.ru/'
+
 
 HEADERS = {
     'User-Agent': 'App/1.0 (incaseoffire@example.com)',
-    'Authorization': 'Bearer 71e89e8af02206575b3b4ae80bf35b6386fe3085af3d4085cbc7b43505084482'
+    'Authorization': 'Bearer {}'.format(args.token)
 }
+
 ENDPOINTS = {
     'vacancies': 'account/{}/vacancies',
     'statuses': 'account/{}/vacancy/statuses',
     'add_applicant': 'account/{}/applicants',
     'upload_cv': 'account/{}/upload',
     'accounts': 'accounts',
-    'attach_to_vacancy': '/account/{}/applicants/{}/vacancy'
+    'attach_to_vacancy': 'account/{}/applicants/{}/vacancy'
     }
-TOKEN = ''
-
 
 
 tranlastion_statuses = {
@@ -47,9 +53,11 @@ tranlastion_statuses = {
 
 def get_account_id():
     r = requests.get(API_URL + ENDPOINTS['accounts'], headers=HEADERS)
+
     if r.status_code == requests.codes.ok:
         r = r.json()
     return r['items'][0]['id']
+
 
 def get_vacancies(account_id):
     url = API_URL + ENDPOINTS['vacancies'].format(account_id)
@@ -62,7 +70,7 @@ def get_vacancies(account_id):
     return r['items']
 
 
-def get_canditate_statuses(account_id):
+def get_candidate_statuses(account_id):
     url = API_URL + ENDPOINTS['statuses'].format(account_id)
     try:
         r = requests.get(url, headers=HEADERS)
@@ -73,10 +81,10 @@ def get_canditate_statuses(account_id):
     return r['items']
 
 
-def load_candidates_from_xls() -> List:
+def load_candidates_from_xls(path):
     """Load candidates from xlsx database."""
     logger.info('Starting loading candidates from xlsx')
-    xls_db = load_workbook(filename='Тестовая база.xlsx')
+    xls_db = load_workbook(filename=path)
     sheet = xls_db.active
     candidates = []
     for row in sheet.iter_rows(min_row=2, values_only=True):
@@ -101,16 +109,18 @@ def append_cv_file(candidates):
             if canidate['fullname'] in unicodedata.normalize('NFC', file):  # пришлось нормализовать имя файла
                 #  после MacOS некоторые символы были некорректны
                 canidate['cv_path'] = os.path.abspath(os.path.join(position_path, file))
-
     return candidates
 
 
-def append_extra_data(candidates, vacancies):
+def append_extra_data(candidates, vacancies, statuses):
     for candidate in candidates:
         candidate['vacancy_id'] = list(
             filter(lambda x: x['position'] == candidate['position'], vacancies)
         )[0]['id']
-        candidate['status'] = tranlastion_statuses[candidate['status']]
+        translated_status = tranlastion_statuses[candidate['status']]
+        candidate['status_id'] = list(
+            filter(lambda x: x['name'] == translated_status, statuses)
+        )[0]['id']
 
 
 def upload_cv(candidate, account_id):
@@ -140,34 +150,31 @@ def upload_applicant(prepared_candidate, account_id):
     return r['id']
 
 
-def attach_to_vacancy(account_id, applicant_id, vacancy_id, status):
+def attach_to_vacancy(account_id, applicant_id, attach_params):
     url = API_URL + ENDPOINTS['attach_to_vacancy'].format(account_id, applicant_id)
     payload = {
-            "vacancy": vacancy_id,
-            "status": 1230,
-            "comment": "Привет",
+            "vacancy": attach_params['vacancy_id'],
+            "status": attach_params['status_id'],
+            "comment": attach_params['comment'],
             "files": [
                 {
-                    "id": 1382810
+                    "id": attach_params['file_id']
                 }
             ],
-            "rejection_reason": null
+            "rejection_reason":  attach_params['comment'] if attach_params['status_id'] == 50 else None # 50 Decline status
         }
 
-    
     try:
-        r = requests.post(url, headers=HEADERS, json=prepared_candidate)
+        r = requests.post(url, headers=HEADERS, json=payload)
         if r.status_code == requests.codes.ok:
             r = r.json()
-            print(r)
     except ConnectionError as e:
+        logger.error('Upload error')
         sys.exit(1)
 
 
 def upload_candidates(candidate, account_id, vacancies, statuses):
     data_from_cv = upload_cv(candidate, account_id)
-    print(statuses)
-    print(candidate['status'], 'ststus')
     prepared_candidate = {
         "last_name": data_from_cv['fields']['name']['last'],
         "first_name": data_from_cv['fields']['name']['first'],
@@ -197,31 +204,32 @@ def upload_candidates(candidate, account_id, vacancies, statuses):
         ]
     }
     applicant_id = upload_applicant(prepared_candidate, account_id)
-    attach_to_vacancy(account_id, applicant_id, candidate['vacancy_id'])
-
+    attach_params = {
+        'vacancy_id': candidate['vacancy_id'],
+        'status_id': candidate['status_id'],
+        'comment': candidate['comment'],
+        'file_id': data_from_cv['id']
+    }
+    attach_to_vacancy(account_id, applicant_id, attach_params)
 
 
 def main():
     account_id = get_account_id()
     logger.info('Starting load dicts')
     vacancies = get_vacancies(account_id)
-    statuses = get_canditate_statuses(account_id)
+    statuses = get_candidate_statuses(account_id)
     if vacancies is None and statuses is None:
         logger.error('Error loading dicts')
         exit(1)
     logger.info('Dicts loaded successfully')
-    candidates = load_candidates_from_xls()
+    candidates = load_candidates_from_xls(args.db_file)
     append_cv_file(candidates)
-    append_extra_data(candidates, vacancies)
+    append_extra_data(candidates, vacancies, statuses)
     logger.info('Starting upload candidates to Huntflow')
     for candidate in candidates:
         upload_candidates(candidate, account_id, vacancies, statuses)
     logger.info('Candidates uploaded successfully')
 
 
-
 if __name__ == '__main__':
-    path = sys.argv[1]
-    token = sys.argv[2]
-    # print(path, token)
     main()
